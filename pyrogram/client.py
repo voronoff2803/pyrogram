@@ -25,6 +25,7 @@ import platform
 import re
 import shutil
 import sys
+import sqlite3
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from hashlib import sha256
@@ -1200,6 +1201,8 @@ class Client(Methods):
             except pyrogram.StopTransmission:
                 raise
             except (FloodWait, FloodPremiumWait):
+                raise
+            except sqlite3.ProgrammingError:
                 raise
             except Exception as e:
                 log.exception(e)
