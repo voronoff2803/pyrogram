@@ -68,7 +68,7 @@ class Connection:
                 break
         else:
             log.warning("Connection failed! Trying again...")
-            raise ConnectionError
+            raise ConnectionError("Connection failed")
 
     async def close(self) -> None:
         await self.protocol.close()
