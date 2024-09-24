@@ -25,7 +25,7 @@ import pyrogram
 from pyrogram import raw, enums
 from pyrogram import types
 from pyrogram import utils
-from pyrogram.errors import ChannelPrivate, MessageIdsEmpty, PeerIdInvalid, ChannelPrivate, BotMethodInvalid, ChannelForumMissing
+from pyrogram.errors import ChannelPrivate, MessageIdsEmpty, PeerIdInvalid, ChannelForumMissing
 from pyrogram.parser import utils as parser_utils, Parser
 from ..object import Object
 from ..update import Update
@@ -473,6 +473,7 @@ class Message(Object, Update):
         web_page: "types.WebPage" = None,
         poll: "types.Poll" = None,
         dice: "types.Dice" = None,
+        stars_amount: int = None,
         new_chat_members: List["types.User"] = None,
         left_chat_member: "types.User" = None,
         new_chat_title: str = None,
@@ -582,6 +583,7 @@ class Message(Object, Update):
         self.web_page = web_page
         self.poll = poll
         self.dice = dice
+        self.stars_amount = stars_amount
         self.new_chat_members = new_chat_members
         self.left_chat_member = left_chat_member
         self.new_chat_title = new_chat_title
@@ -628,14 +630,14 @@ class Message(Object, Update):
     @staticmethod
     async def _parse(
         client: "pyrogram.Client",
-        message: raw.base.Message,
+        message: "raw.base.Message",
         users: dict,
         chats: dict,
         topics: dict = None,
         is_scheduled: bool = False,
         replies: int = 1,
         business_connection_id: str = None,
-        reply_to_message: "raw.base.Message" = None
+        raw_reply_to_message: "raw.base.Message" = None
     ):
         if isinstance(message, raw.types.MessageEmpty):
             return Message(
@@ -698,6 +700,7 @@ class Message(Object, Update):
             chat_ttl_period = None
             boosts_applied = None
             join_request_approved = None
+            stars_amount = None
 
             service_type = None
 
@@ -772,6 +775,7 @@ class Message(Object, Update):
                 service_type = enums.MessageServiceType.WEB_APP_DATA
             elif isinstance(action, raw.types.MessageActionGiveawayLaunch):
                 giveaway_launched = True
+                stars_amount = getattr(action, "stars", None)
                 service_type = enums.MessageServiceType.GIVEAWAY_LAUNCH
             elif isinstance(action, raw.types.MessageActionGiftCode):
                 gift_code = types.GiftCode._parse(client, action, chats)
@@ -826,6 +830,7 @@ class Message(Object, Update):
                 web_app_data=web_app_data,
                 giveaway_launched=giveaway_launched,
                 gift_code=gift_code,
+                stars_amount=stars_amount,
                 requested_chats=requested_chats,
                 successful_payment=successful_payment,
                 chat_ttl_period=chat_ttl_period,
@@ -846,10 +851,9 @@ class Message(Object, Update):
                     )
 
                     parsed_message.service = enums.MessageServiceType.PINNED_MESSAGE
-                except MessageIdsEmpty:
+                except (MessageIdsEmpty, ChannelPrivate):
                     pass
-
-            if isinstance(action, raw.types.MessageActionGameScore):
+            elif isinstance(action, raw.types.MessageActionGameScore):
                 parsed_message.game_high_score = types.GameHighScore._parse_action(client, message, users)
 
                 if message.reply_to and replies:
@@ -861,7 +865,7 @@ class Message(Object, Update):
                         )
 
                         parsed_message.service = enums.MessageServiceType.GAME_HIGH_SCORE
-                    except MessageIdsEmpty:
+                    except (MessageIdsEmpty, ChannelPrivate):
                         pass
 
             client.message_cache[(parsed_message.chat.id, parsed_message.id)] = parsed_message
@@ -870,7 +874,7 @@ class Message(Object, Update):
                 if message.reply_to.reply_to_top_id:
                     parsed_message.message_thread_id = message.reply_to.reply_to_top_id
                 else:
-                    parsed_message.message_thread_id = message.reply_to.reply_to_msg_id
+                    parsed_message.message_thread_id = message.reply_to.reply_to_msg_id or 1
 
             return parsed_message
 
@@ -958,11 +962,14 @@ class Message(Object, Update):
                 elif isinstance(media, raw.types.MessageMediaStory):
                     if media.story:
                         story = await types.Story._parse(client, media.story, users, chats, media.peer)
-                    else:
+                    elif client.me and not client.me.is_bot:
                         try:
                             story = await client.get_stories(utils.get_peer_id(media.peer), media.id)
-                        except (BotMethodInvalid, ChannelPrivate):
-                            story = await types.Story._parse(client, media, users, chats, media.peer)
+                        except ChannelPrivate:
+                            pass
+
+                    if not story:
+                        story = await types.Story._parse(client, media, users, chats, media.peer)
 
                     media_type = enums.MessageMediaType.STORY
                 elif isinstance(media, raw.types.MessageMediaDocument):
@@ -1133,52 +1140,55 @@ class Message(Object, Update):
 
             if message.reply_to:
                 if isinstance(message.reply_to, raw.types.MessageReplyHeader):
+                    parsed_message.reply_to_message_id = getattr(message.reply_to, "reply_to_msg_id", None)
+                    parsed_message.reply_to_top_message_id = getattr(message.reply_to, "reply_to_top_id", None)
+
                     if message.reply_to.forum_topic:
                         if message.reply_to.reply_to_top_id:
-                            thread_id = message.reply_to.reply_to_top_id
-                            parsed_message.reply_to_message_id = message.reply_to.reply_to_msg_id
+                            parsed_message.message_thread_id = message.reply_to.reply_to_top_id
                         else:
-                            thread_id = message.reply_to.reply_to_msg_id
-
-                        parsed_message.message_thread_id = thread_id
+                            parsed_message.message_thread_id = message.reply_to.reply_to_msg_id or 1
 
                         if topics:
-                            parsed_message.topic = types.ForumTopic._parse(client, topics[thread_id], users=users, chats=chats)
-                    else:
-                        if message.reply_to.quote:
-                            quote_entities = [types.MessageEntity._parse(client, entity, users) for entity in message.reply_to.quote_entities]
-                            quote_entities = types.List(filter(lambda x: x is not None, quote_entities))
+                            parsed_message.topic = types.ForumTopic._parse(client, topics.get(parsed_message.message_thread_id), users=users, chats=chats)
+                    elif message.reply_to.quote:
+                        quote_entities = [types.MessageEntity._parse(client, entity, users) for entity in message.reply_to.quote_entities]
+                        quote_entities = types.List(filter(lambda x: x is not None, quote_entities))
 
-                            parsed_message.quote = message.reply_to.quote
-                            parsed_message.quote_text = (
-                                Str(message.reply_to.quote_text).init(quote_entities) or None
-                                if media is None or web_page is not None
-                                else None
-                            )
-                            parsed_message.quote_entities = (
-                                quote_entities or None
-                                if media is None or web_page is not None
-                                else None
-                            )
-
-                        parsed_message.reply_to_message_id = message.reply_to.reply_to_msg_id
-                        parsed_message.reply_to_top_message_id = message.reply_to.reply_to_top_id
+                        parsed_message.quote = message.reply_to.quote
+                        parsed_message.quote_text = (
+                            Str(message.reply_to.quote_text).init(quote_entities) or None
+                            if media is None or web_page is not None
+                            else None
+                        )
+                        parsed_message.quote_entities = (
+                            quote_entities or None
+                            if media is None or web_page is not None
+                            else None
+                        )
                 elif isinstance(message.reply_to, raw.types.MessageReplyStoryHeader):
                     parsed_message.reply_to_story_id = message.reply_to.story_id
                     parsed_message.reply_to_story_user_id = utils.get_peer_id(message.reply_to.peer)
 
                 if replies:
-                    if parsed_message.reply_to_message_id:
-                        is_cross_chat = getattr(message.reply_to, "reply_to_peer_id", None) and getattr(message.reply_to.reply_to_peer_id, "channel_id", None)
+                    if raw_reply_to_message:
+                        parsed_message.reply_to_message = await types.Message._parse(
+                            client,
+                            raw_reply_to_message,
+                            users,
+                            chats,
+                            business_connection_id=business_connection_id,
+                            replies=0
+                        )
+                    else:
+                        if isinstance(message.reply_to, raw.types.MessageReplyHeader):
+                            if message.reply_to.reply_to_peer_id:
+                                key = (utils.get_peer_id(message.reply_to.reply_to_peer_id), message.reply_to.reply_to_msg_id)
+                                reply_to_params = {"chat_id": key[0], 'message_ids': key[1]}
+                            else:
+                                key = (parsed_message.chat.id, parsed_message.reply_to_message_id)
+                                reply_to_params = {'chat_id': key[0], 'reply_to_message_ids': message.id}
 
-                        if is_cross_chat:
-                            key = (utils.get_channel_id(message.reply_to.reply_to_peer_id.channel_id), message.reply_to.reply_to_msg_id)
-                            reply_to_params = {"chat_id": key[0], 'message_ids': key[1]}
-                        else:
-                            key = (parsed_message.chat.id, parsed_message.reply_to_message_id)
-                            reply_to_params = {'chat_id': key[0], 'reply_to_message_ids': message.id}
-
-                        try:
                             reply_to_message = client.message_cache[key]
 
                             if not reply_to_message:
@@ -1187,32 +1197,24 @@ class Message(Object, Update):
                                         replies=replies - 1,
                                         **reply_to_params
                                     )
-                                except ChannelPrivate:
+                                except (ChannelPrivate, MessageIdsEmpty):
                                     pass
-                            if reply_to_message and not reply_to_message.forum_topic_created:
-                                parsed_message.reply_to_message = reply_to_message
-                        except ChannelPrivate:
-                            pass
-                        except MessageIdsEmpty:
-                            pass
-                    elif parsed_message.reply_to_story_id:
-                        try:
-                            reply_to_story = await client.get_stories(
-                                parsed_message.reply_to_story_user_id,
-                                parsed_message.reply_to_story_id
-                            )
-                        except BotMethodInvalid:
-                            pass
-                        else:
-                            parsed_message.reply_to_story = reply_to_story
 
-            if parsed_message.topic is None and parsed_message.chat.is_forum:
+                            parsed_message.reply_to_message = reply_to_message
+                        elif isinstance(message.reply_to, raw.types.MessageReplyStoryHeader):
+                            if client.me and not client.me.is_bot:
+                                parsed_message.reply_to_story = await client.get_stories(
+                                    utils.get_peer_id(message.reply_to.peer),
+                                    message.reply_to.story_id
+                                )
+
+            if not parsed_message.topic and parsed_message.chat.is_forum and client.me and not client.me.is_bot:
                 try:
                     parsed_message.topic = await client.get_forum_topics_by_id(
                         chat_id=parsed_message.chat.id,
                         topic_ids=parsed_message.message_thread_id or 1
                     )
-                except (BotMethodInvalid, ChannelForumMissing):
+                except (ChannelPrivate, ChannelForumMissing):
                     pass
 
             if not parsed_message.poll:  # Do not cache poll messages
@@ -4948,7 +4950,7 @@ class Message(Object, Update):
             message_id=self.id
         )
 
-    async def pay(self) -> bool:
+    async def pay(self) -> List[Union["types.Photo", "types.Video"]]:
         """Bound method *pay* of :obj:`~pyrogram.types.Message`.
 
         Use as a shortcut for:
@@ -4966,7 +4968,7 @@ class Message(Object, Update):
                 await message.pay()
 
         Returns:
-            True on success.
+            List of :obj:`~pyrogram.types.Photo` | :obj:`~pyrogram.types.Video`: On success, the list of bought photos and videos is returned.
         """
         return await self._client.send_payment_form(
             chat_id=self.chat.id,

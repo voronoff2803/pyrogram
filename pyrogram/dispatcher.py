@@ -28,7 +28,8 @@ from pyrogram import raw
 from pyrogram.handlers import (
     CallbackQueryHandler, MessageHandler, EditedMessageHandler, DeletedMessagesHandler,
     UserStatusHandler, RawUpdateHandler, InlineQueryHandler, PollHandler, PreCheckoutQueryHandler,
-    ChosenInlineResultHandler, ChatMemberUpdatedHandler, ChatJoinRequestHandler, StoryHandler
+    ChosenInlineResultHandler, ChatMemberUpdatedHandler, ChatJoinRequestHandler, StoryHandler,
+    ShippingQueryHandler, MessageReactionHandler, MessageReactionCountHandler, ChatBoostHandler
 )
 from pyrogram.raw.types import (
     UpdateNewMessage, UpdateNewChannelMessage, UpdateNewScheduledMessage,
@@ -38,7 +39,9 @@ from pyrogram.raw.types import (
     UpdateBotCallbackQuery, UpdateInlineBotCallbackQuery, UpdateBotPrecheckoutQuery,
     UpdateUserStatus, UpdateBotInlineQuery, UpdateMessagePoll,
     UpdateBotInlineSend, UpdateChatParticipant, UpdateChannelParticipant,
-    UpdateBotChatInviteRequester, UpdateStory
+    UpdateBotChatInviteRequester, UpdateStory, UpdateBotShippingQuery, UpdateBotMessageReaction,
+    UpdateBotMessageReactions, UpdateBotChatBoost, UpdateBusinessBotCallbackQuery,
+    UpdateBotPurchasedPaidMedia
 )
 
 log = logging.getLogger(__name__)
@@ -48,7 +51,7 @@ class Dispatcher:
     NEW_MESSAGE_UPDATES = (UpdateNewMessage, UpdateNewChannelMessage, UpdateNewScheduledMessage, UpdateBotNewBusinessMessage)
     EDIT_MESSAGE_UPDATES = (UpdateEditMessage, UpdateEditChannelMessage, UpdateBotEditBusinessMessage)
     DELETE_MESSAGES_UPDATES = (UpdateDeleteMessages, UpdateDeleteChannelMessages, UpdateBotDeleteBusinessMessage)
-    CALLBACK_QUERY_UPDATES = (UpdateBotCallbackQuery, UpdateInlineBotCallbackQuery)
+    CALLBACK_QUERY_UPDATES = (UpdateBotCallbackQuery, UpdateInlineBotCallbackQuery, UpdateBusinessBotCallbackQuery)
     CHAT_MEMBER_UPDATES = (UpdateChatParticipant, UpdateChannelParticipant)
     USER_STATUS_UPDATES = (UpdateUserStatus,)
     BOT_INLINE_QUERY_UPDATES = (UpdateBotInlineQuery,)
@@ -57,6 +60,11 @@ class Dispatcher:
     CHAT_JOIN_REQUEST_UPDATES = (UpdateBotChatInviteRequester,)
     NEW_STORY_UPDATES = (UpdateStory,)
     PRE_CHECKOUT_QUERY_UPDATES = (UpdateBotPrecheckoutQuery,)
+    SHIPPING_QUERY_UPDATES = (UpdateBotShippingQuery,)
+    MESSAGE_REACTION_UPDATES = (UpdateBotMessageReaction,)
+    MESSAGE_REACTION_COUNT_UPDATES = (UpdateBotMessageReactions,)
+    CHAT_BOOST_UPDATES = (UpdateBotChatBoost,)
+    PURCHASED_PAID_MEDIA_UPDATES = (UpdateBotPurchasedPaidMedia,)
 
     def __init__(self, client: "pyrogram.Client"):
         self.client = client
@@ -69,6 +77,8 @@ class Dispatcher:
         self.groups = OrderedDict()
 
         async def message_parser(update, users, chats):
+            connection_id = getattr(update, "connection_id", None)
+
             return (
                 await pyrogram.types.Message._parse(
                     self.client,
@@ -76,8 +86,9 @@ class Dispatcher:
                     users,
                     chats,
                     is_scheduled=isinstance(update, UpdateNewScheduledMessage),
-                    business_connection_id=getattr(update, "connection_id", None),
-                    reply_to_message=getattr(update, "reply_to_message", None)
+                    replies=0 if getattr(update, "connection_id", None) else 1,
+                    business_connection_id=connection_id,
+                    raw_reply_to_message=getattr(update, "reply_to_message", None)
                 ),
                 MessageHandler
             )
@@ -99,7 +110,7 @@ class Dispatcher:
 
         async def callback_query_parser(update, users, chats):
             return (
-                await pyrogram.types.CallbackQuery._parse(self.client, update, users),
+                await pyrogram.types.CallbackQuery._parse(self.client, update, users, chats),
                 CallbackQueryHandler
             )
 
@@ -151,6 +162,36 @@ class Dispatcher:
                 PreCheckoutQueryHandler
             )
 
+        async def shipping_query_parser(update, users, chats):
+            return (
+                await pyrogram.types.ShippingQuery._parse(self.client, update, users),
+                ShippingQueryHandler
+            )
+
+        async def message_reaction_parser(update, users, chats):
+            return (
+                pyrogram.types.MessageReactionUpdated._parse(self.client, update, users, chats),
+                MessageReactionHandler
+            )
+
+        async def message_reaction_count_parser(update, users, chats):
+            return (
+                pyrogram.types.MessageReactionCountUpdated._parse(self.client, update, users, chats),
+                MessageReactionCountHandler
+            )
+
+        async def chat_boost_parser(update, users, chats):
+            return (
+                pyrogram.types.ChatBoostUpdated._parse(self.client, update, users, chats),
+                ChatBoostHandler
+            )
+
+        async def purchased_paid_media_parser(update, users, chats):
+            return (
+                pyrogram.types.PurchasedPaidMedia._parse(self.client, update, users),
+                ChatBoostHandler
+            )
+
         self.update_parsers = {
             Dispatcher.NEW_MESSAGE_UPDATES: message_parser,
             Dispatcher.EDIT_MESSAGE_UPDATES: edited_message_parser,
@@ -163,7 +204,12 @@ class Dispatcher:
             Dispatcher.CHAT_MEMBER_UPDATES: chat_member_updated_parser,
             Dispatcher.CHAT_JOIN_REQUEST_UPDATES: chat_join_request_parser,
             Dispatcher.NEW_STORY_UPDATES: story_parser,
-            Dispatcher.PRE_CHECKOUT_QUERY_UPDATES: pre_checkout_query_parser
+            Dispatcher.PRE_CHECKOUT_QUERY_UPDATES: pre_checkout_query_parser,
+            Dispatcher.SHIPPING_QUERY_UPDATES: shipping_query_parser,
+            Dispatcher.MESSAGE_REACTION_UPDATES: message_reaction_parser,
+            Dispatcher.MESSAGE_REACTION_COUNT_UPDATES: message_reaction_count_parser,
+            Dispatcher.CHAT_BOOST_UPDATES: chat_boost_parser,
+            Dispatcher.PURCHASED_PAID_MEDIA_UPDATES: purchased_paid_media_parser,
         }
 
         self.update_parsers = {key: value for key_tuple, value in self.update_parsers.items() for key in key_tuple}
