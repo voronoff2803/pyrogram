@@ -74,8 +74,15 @@ class InlineKeyboardButton(Object):
             A button that asks for the 2-step verification password of the current user and then sends a callback query to a bot Data to be sent to the bot via a callback query.
 
         pay (``bool``, *optional*):
-            Change text of pay button.
+            Pass True, to send a Pay button.
+            Substrings `⭐` and `XTR` in the buttons's text will be replaced with a Telegram Star icon.
             Available in :meth:`~pyrogram.Client.send_invoice`.
+
+            **NOTE**: This type of button **must** always be the first button in the first row and can only be used in invoice messages.
+
+        copy_text (``str``, *optional*):
+            A button that copies specified text to clipboard.
+            Limited to 256 character.
     """
 
     def __init__(
@@ -90,7 +97,8 @@ class InlineKeyboardButton(Object):
         switch_inline_query_current_chat: Optional[str] = None,
         callback_game: Optional["types.CallbackGame"] = None,
         requires_password: Optional[bool] = None,
-        pay: bool = None
+        pay: bool = None,
+        copy_text: str = None
     ):
         super().__init__()
 
@@ -105,6 +113,7 @@ class InlineKeyboardButton(Object):
         self.callback_game = callback_game
         self.requires_password = requires_password
         self.pay = pay
+        self.copy_text = copy_text
 
     @staticmethod
     def read(b: "raw.base.KeyboardButton"):
@@ -172,6 +181,12 @@ class InlineKeyboardButton(Object):
                 pay=True
             )
 
+        if isinstance(b, raw.types.KeyboardButtonCopy):
+            return InlineKeyboardButton(
+                text=b.text,
+                copy_text=b.copy_text
+            )
+
     async def write(self, client: "pyrogram.Client"):
         if self.callback_data is not None:
             # Telegram only wants bytes, but we are allowed to pass strings too, for convenience.
@@ -227,3 +242,9 @@ class InlineKeyboardButton(Object):
 
         if self.pay is not None:
             return raw.types.KeyboardButtonBuy(text=self.text)
+
+        if self.copy_text is not None:
+            return raw.types.KeyboardButtonCopy(
+                text=self.text,
+                copy_text=self.copy_text
+            )

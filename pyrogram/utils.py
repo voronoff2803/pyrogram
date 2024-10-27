@@ -31,10 +31,8 @@ from typing import Union, List, Dict, Optional
 import pyrogram
 from pyrogram import raw, enums
 from pyrogram import types
-from pyrogram.errors import AuthBytesInvalid
+from pyrogram.types.messages_and_media.message import Str
 from pyrogram.file_id import FileId, FileType, PHOTO_TYPES, DOCUMENT_TYPES
-from pyrogram.session import Session
-from pyrogram.session.auth import Auth
 
 
 async def ainput(prompt: str = "", *, hide: bool = False):
@@ -457,8 +455,8 @@ def compute_password_check(
 async def parse_text_entities(
     client: "pyrogram.Client",
     text: str,
-    parse_mode: enums.ParseMode,
-    entities: List["types.MessageEntity"]
+    parse_mode: Optional[enums.ParseMode],
+    entities: Optional[List["types.MessageEntity"]]
 ) -> Dict[str, Union[str, List[raw.base.MessageEntity]]]:
     if entities:
         # Inject the client instance because parsing user mentions requires it
@@ -498,3 +496,20 @@ def get_first_url(text):
     matches = re.findall(r"(https?):\/\/([\w_-]+(?:(?:\.[\w_-]+)+))([\w.,@?^=%&:\/~+#-]*[\w@?^=%&\/~+#-])", text)
 
     return f"{matches[0][0]}://{matches[0][1]}{matches[0][2]}" if matches else None
+
+
+def parse_text_with_entities(client, message: "raw.types.TextWithEntities", users):
+    entities = types.List(
+        filter(
+            lambda x: x is not None,
+            [
+                types.MessageEntity._parse(client, entity, users)
+                for entity in getattr(message, "entities", [])
+            ]
+        )
+    )
+
+    return {
+        "text": Str(getattr(message, "text", "")).init(entities) or None,
+        "entities": entities or None
+    }

@@ -55,7 +55,7 @@ class SendMediaGroup:
         quote_offset: int = None,
         schedule_date: datetime = None,
         protect_content: bool = None,
-        show_above_text: bool = None,
+        show_caption_above_media: bool = None,
         business_connection_id: str = None
     ) -> List["types.Message"]:
         """Send a group of photos or videos as an album.
@@ -111,9 +111,8 @@ class SendMediaGroup:
             protect_content (``bool``, *optional*):
                 Protects the contents of the sent message from forwarding and saving.
 
-            show_above_text (``bool``, *optional*):
-                If True, link preview will be shown above the message text.
-                Otherwise, the link preview will be shown below the message text.
+            show_caption_above_media (``bool``, *optional*):
+                Pass True, if the caption must be shown above the message media.
 
             business_connection_id (``str``, *optional*):
                 Unique identifier of the business connection on behalf of which the message will be sent.
@@ -221,7 +220,7 @@ class SendMediaGroup:
                                             w=i.width,
                                             h=i.height
                                         ),
-                                        raw.types.DocumentAttributeFilename(file_name=os.path.basename(i.media))
+                                        raw.types.DocumentAttributeFilename(file_name=i.file_name or os.path.basename(i.media))
                                     ]
                                 ),
                                 business_connection_id=business_connection_id
@@ -275,7 +274,7 @@ class SendMediaGroup:
                                         w=i.width,
                                         h=i.height
                                     ),
-                                    raw.types.DocumentAttributeFilename(file_name=getattr(i.media, "name", "video.mp4"))
+                                    raw.types.DocumentAttributeFilename(file_name=i.file_name or getattr(i.media, "name", "video.mp4"))
                                 ]
                             ),
                             business_connection_id=business_connection_id
@@ -306,7 +305,7 @@ class SendMediaGroup:
                                             performer=i.performer,
                                             title=i.title
                                         ),
-                                        raw.types.DocumentAttributeFilename(file_name=os.path.basename(i.media))
+                                        raw.types.DocumentAttributeFilename(file_name=i.file_name or os.path.basename(i.media))
                                     ]
                                 ),
                                 business_connection_id=business_connection_id
@@ -354,7 +353,7 @@ class SendMediaGroup:
                                         performer=i.performer,
                                         title=i.title
                                     ),
-                                    raw.types.DocumentAttributeFilename(file_name=getattr(i.media, "name", "audio.mp3"))
+                                    raw.types.DocumentAttributeFilename(file_name=i.file_name or getattr(i.media, "name", "audio.mp3"))
                                 ]
                             ),
                             business_connection_id=business_connection_id
@@ -379,7 +378,7 @@ class SendMediaGroup:
                                     file=await self.save_file(i.media),
                                     thumb=await self.save_file(i.thumb),
                                     attributes=[
-                                        raw.types.DocumentAttributeFilename(file_name=os.path.basename(i.media))
+                                        raw.types.DocumentAttributeFilename(file_name=i.file_name or os.path.basename(i.media))
                                     ]
                                 ),
                                 business_connection_id=business_connection_id
@@ -424,7 +423,7 @@ class SendMediaGroup:
                                 file=await self.save_file(i.media),
                                 thumb=await self.save_file(i.thumb),
                                 attributes=[
-                                    raw.types.DocumentAttributeFilename(file_name=getattr(i.media, "name", "file.zip"))
+                                    raw.types.DocumentAttributeFilename(file_name=i.file_name or getattr(i.media, "name", "file.zip"))
                                 ]
                             ),
                             business_connection_id=business_connection_id
@@ -468,7 +467,7 @@ class SendMediaGroup:
                 ),
                 schedule_date=utils.datetime_to_timestamp(schedule_date),
                 noforwards=protect_content,
-                invert_media=show_above_text,
+                invert_media=show_caption_above_media,
                 effect=effect_id,
             ),
             sleep_threshold=60,

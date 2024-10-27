@@ -148,6 +148,7 @@ def pyrogram_api():
         messages="""
         Messages
             send_message
+            forward_media_group
             forward_messages
             copy_message
             copy_media_group
@@ -224,6 +225,8 @@ def pyrogram_api():
             set_chat_permissions
             pin_chat_message
             unpin_chat_message
+            pin_forum_topic
+            unpin_forum_topic
             unpin_all_chat_messages
             get_chat
             get_chat_member
@@ -322,8 +325,15 @@ def pyrogram_api():
         Payments
             apply_gift_code
             check_gift_code
+            convert_star_gift
             get_payment_form
+            get_star_gifts
+            get_user_star_gifts_count
+            get_user_star_gifts
+            hide_star_gift
             send_payment_form
+            send_star_gift
+            show_star_gift
         """,
         phone="""
         Phone
@@ -358,6 +368,12 @@ def pyrogram_api():
             answer_shipping_query
             create_invoice_link
             refund_star_payment
+            set_bot_info_description
+            get_bot_info_description
+            set_bot_info_short_description
+            get_bot_info_short_description
+            set_bot_name
+            get_bot_name
         """,
         business="""
         Business
@@ -467,7 +483,6 @@ def pyrogram_api():
             BusinessConnection
             BusinessInfo
             BusinessIntro
-            BusinessMessage
             BusinessRecipients
             BusinessWeeklyOpen
             BusinessWorkingHours
@@ -496,6 +511,7 @@ def pyrogram_api():
         """,
         messages_media="""
         Messages & Media
+            BusinessMessage
             Message
             MessageEntity
             Photo
@@ -517,10 +533,14 @@ def pyrogram_api():
             PollOption
             Dice
             Reaction
+            RefundedPayment
+            StarGift
             VideoChatScheduled
             VideoChatStarted
             VideoChatEnded
             VideoChatMembersInvited
+            PhoneCallStarted
+            PhoneCallEnded
             WebAppData
             MessageReactions
             ChatReactions
@@ -528,7 +548,9 @@ def pyrogram_api():
             MyBoost
             BoostsStatus
             Giveaway
-            GiveawayResult
+            GiveawayCreated
+            GiveawayCompleted
+            GiveawayWinners
             Invoice
             GiftCode
             CheckedGiftCode
@@ -537,6 +559,9 @@ def pyrogram_api():
             PaidMediaPreview
             PaymentForm
             ChatBoost
+            ContactRegistered
+            ScreenshotTaken
+            WriteAccessAllowed
         """,
         bot_keyboards="""
         Bot keyboards
@@ -805,6 +830,11 @@ def pyrogram_api():
         active_session="""
         ActiveSession
             ActiveSession.reset
+        """,
+        star_gift="""
+        StarGift
+            StarGift.show
+            StarGift.hide
         """
     )
 
@@ -846,6 +876,7 @@ def pyrogram_api():
             BusinessSchedule
             ChatAction
             ChatEventAction
+            ChatJoinType
             ChatMemberStatus
             ChatMembersFilter
             ChatType
@@ -856,6 +887,7 @@ def pyrogram_api():
             MessagesFilter
             NextCodeType
             ParseMode
+            PhoneCallDiscardReason
             PollType
             PrivacyKey
             ProfileColor
